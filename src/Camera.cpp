@@ -2,6 +2,8 @@
 
 #include "../include/Camera.h"
 
+#include <thread>
+
 Camera::Camera(int w, int h) : width(w), height(h) {
   // Constants will be updated in Scene::render
   MAX_DEPTH_DIFFUSE = 0;
@@ -51,33 +53,49 @@ void Camera::saveImage(std::string filename) {
   std::cout << "The file has been created at: " + filename + "\n";
 }
 
-void Camera::castRays(int raysPerPixel) {
-  float progress = 0.0f;
+void Camera::castRaysSubset(int startRow, int endRow, int raysPerPixel,
+                            std::atomic<float>& progress) {
   Ray ray{};
+  float totalPixels = (endRow - startRow) * width;
+  int pixelCount = 0;
 
-  // Loop through all pixels and assign colors
-  for (int j = 0; j < height; ++j) {
+  for (int j = startRow; j < endRow; ++j) {
     for (int i = 0; i < width; ++i) {
       glm::vec3 colorSum(0.0f);
-
-      // Calculate ray direction once per pixel
       glm::vec3 direction = rayDirectionFromCamera(i, j);
 
       for (int k = 0; k < raysPerPixel; ++k) {
-        // Reuse ray object
         ray.setRay(location, direction);
-
-        // Check intersections that occur in the scene
         colorSum += castRay(ray, MAX_DEPTH_DIFFUSE, MAX_DEPTH_REFLECTIVE);
       }
 
-      // Average the color over the number of rays per pixel
       pixels[j][i] = colorSum / static_cast<float>(raysPerPixel);
+      pixelCount++;
 
-      // Show progress during rendering
-      progressBar(progress / (height * width));
-      progress += 1.0f;
+      // Only update progress for thread 1
+      if (startRow == 0) {
+        progress = static_cast<float>(pixelCount) / totalPixels;
+        progressBar(progress);
+      }
     }
+  }
+}
+
+void Camera::castRays(int raysPerPixel) {
+  int numThreads = std::thread::hardware_concurrency();
+  std::vector<std::thread> threads;
+  int rowsPerThread = height / numThreads;
+  std::atomic<float> progress(0.0f);
+
+  for (int t = 0; t < numThreads; ++t) {
+    int startRow = t * rowsPerThread;
+    int endRow = (t == numThreads - 1) ? height : startRow + rowsPerThread;
+    threads.emplace_back(&Camera::castRaysSubset, this, startRow, endRow,
+                         raysPerPixel, std::ref(progress));
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
   }
 }
 
