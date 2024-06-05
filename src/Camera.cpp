@@ -3,38 +3,44 @@
 #include "../include/Camera.h"
 
 #include <thread>
+#include <chrono> // Include the chrono library for timing
 
-Camera::Camera(int w, int h) : width(w), height(h) {
+Camera::Camera(int w, int h) : width(w), height(h)
+{
   // Constants will be updated in Scene::render
   MAX_DEPTH_DIFFUSE = 0;
   MAX_DEPTH_REFLECTIVE = 0;
   MAX_SHADOWRAYS = 0;
   MAX_INDIRECTRAYS = 0;
 
-  // Allocate memory for all the pixels
-  pixels.resize(height);
-  for (int i = 0; i < height; ++i) {
-    pixels[i].resize(width);
-  }
+  // Allocate memory for all the pixels in a 1D vector
+  pixels.resize(width * height);
 }
 
-inline static float linear_to_gamma(double linear_component) {
-  if (linear_component > 0.0f) return sqrt(linear_component);
+inline static float linear_to_gamma(double linear_component)
+{
+  if (linear_component > 0.0f)
+    return sqrt(linear_component);
 
   return 0.0f;
 }
 
-void Camera::saveImage(std::string filename) {
-  std::ofstream ppmFile(filename);  // Opens/creates the file
+void Camera::saveImage(std::string filename)
+{
+  std::ofstream ppmFile(filename); // Opens/creates the file
 
-  ppmFile << "P3\n" << width << ' ' << height << "\n255\n";
+  ppmFile << "P3\n"
+          << width << ' ' << height << "\n255\n";
 
   // Write the clamped pixel values to the output file
-  for (int j = 0; j < height; ++j) {
-    for (int i = 0; i < width; ++i) {
-      auto r = pixels[j][i].r;
-      auto g = pixels[j][i].g;
-      auto b = pixels[j][i].b;
+  for (int j = 0; j < height; ++j)
+  {
+    for (int i = 0; i < width; ++i)
+    {
+      auto &pixel = pixels[j * width + i];
+      auto r = pixel.r;
+      auto g = pixel.g;
+      auto b = pixel.b;
 
       r = linear_to_gamma(r);
       g = linear_to_gamma(g);
@@ -54,69 +60,93 @@ void Camera::saveImage(std::string filename) {
 }
 
 void Camera::castRaysSubset(int startRow, int endRow, int raysPerPixel,
-                            std::atomic<float>& progress) {
+                            std::atomic<float> &progress)
+{
   Ray ray{};
-  float totalPixels = (endRow - startRow) * width;
-  int pixelCount = 0;
 
-  for (int j = startRow; j < endRow; ++j) {
-    for (int i = 0; i < width; ++i) {
+  auto start = std::chrono::high_resolution_clock::now();
+
+  const float updateInterval = 0.05f; // Update progress every 5%
+  float nextProgressUpdate = updateInterval;
+  int totalRows = height;
+
+  for (int j = startRow; j < endRow; ++j)
+  {
+    for (int i = 0; i < width; ++i)
+    {
       glm::vec3 colorSum(0.0f);
       glm::vec3 direction = rayDirectionFromCamera(i, j);
 
-      for (int k = 0; k < raysPerPixel; ++k) {
+      for (int k = 0; k < raysPerPixel; ++k)
+      {
         ray.setRay(location, direction);
         colorSum += castRay(ray, MAX_DEPTH_DIFFUSE, MAX_DEPTH_REFLECTIVE);
       }
 
-      pixels[j][i] = colorSum / static_cast<float>(raysPerPixel);
-      pixelCount++;
+      // Average the color over the number of rays per pixel
+      pixels[j * width + i] = colorSum / static_cast<float>(raysPerPixel);
+    }
 
-      // Only update progress for thread 1
-      if (startRow == 0) {
-        progress = static_cast<float>(pixelCount) / totalPixels;
-        progressBar(progress);
-      }
+    // Update progress bar less frequently
+    float currentProgress = static_cast<float>(j) / totalRows;
+    if (currentProgress >= nextProgressUpdate)
+    {
+      progressBar(currentProgress);
+      nextProgressUpdate += updateInterval;
     }
   }
+
+  // Record the end time
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = end - start;
+
+  // Print the rendering time
+  std::cout << "Rendering completed in " << elapsed.count() << " seconds.\n";
 }
 
-void Camera::castRays(int raysPerPixel) {
+void Camera::castRays(int raysPerPixel)
+{
   int numThreads = std::thread::hardware_concurrency();
   std::vector<std::thread> threads;
   int rowsPerThread = height / numThreads;
   std::atomic<float> progress(0.0f);
 
-  for (int t = 0; t < numThreads; ++t) {
+  for (int t = 0; t < numThreads; ++t)
+  {
     int startRow = t * rowsPerThread;
     int endRow = (t == numThreads - 1) ? height : startRow + rowsPerThread;
     threads.emplace_back(&Camera::castRaysSubset, this, startRow, endRow,
                          raysPerPixel, std::ref(progress));
   }
 
-  for (auto& thread : threads) {
+  for (auto &thread : threads)
+  {
     thread.join();
   }
 }
 
-glm::vec3 Camera::castRay(const Ray& ray, int diffuseBounceCount,
-                          int mirrorBounceCount) {
+glm::vec3 Camera::castRay(const Ray &ray, int diffuseBounceCount,
+                          int mirrorBounceCount)
+{
   glm::vec3 color{0.0f, 0.0f, 0.0f};
 
   // End of recursion, return black
-  if (diffuseBounceCount <= 0 || mirrorBounceCount <= 0) {
+  if (diffuseBounceCount <= 0 || mirrorBounceCount <= 0)
+  {
     return color;
   }
 
   hitResult hit = closestIntersect(ray, geometries);
 
   // We have a hit
-  if (hit.t > EPSILON && hit.t < FLT_MAX) {
+  if (hit.t > EPSILON && hit.t < FLT_MAX)
+  {
     glm::vec3 hitPoint = ray.at(hit.t);
-    Geometry* hitGeometry = geometries[hit.index];
+    Geometry *hitGeometry = geometries[hit.index];
 
     // REFLECTIVE
-    if (hitGeometry->getMaterial().type == REFLECTIVE) {
+    if (hitGeometry->getMaterial().type == REFLECTIVE)
+    {
       glm::vec3 reflectDir =
           glm::reflect(ray.getDirection(), hitGeometry->getNormal(hitPoint));
       Ray reflectedRay(hitPoint, reflectDir);
@@ -124,7 +154,8 @@ glm::vec3 Camera::castRay(const Ray& ray, int diffuseBounceCount,
       color = castRay(reflectedRay, diffuseBounceCount, mirrorBounceCount - 1);
     }
     // DIFFUSE
-    else if (hitGeometry->getMaterial().type == DIFFUSE) {
+    else if (hitGeometry->getMaterial().type == DIFFUSE)
+    {
       glm::vec3 direct =
           directLight(hitPoint, hitGeometry->getNormal(hitPoint), hit.index);
       glm::vec3 indirect =
@@ -134,7 +165,8 @@ glm::vec3 Camera::castRay(const Ray& ray, int diffuseBounceCount,
       color += direct + (indirect * hitGeometry->getMaterial().color);
     }
     // TRANSPARENT
-    else {
+    else
+    {
       // Reflection
       glm::vec3 normal = hitGeometry->getNormal(hitPoint);
       glm::vec3 reflectDir = glm::reflect(ray.getDirection(), normal);
@@ -143,28 +175,30 @@ glm::vec3 Camera::castRay(const Ray& ray, int diffuseBounceCount,
           castRay(reflectedRay, diffuseBounceCount, mirrorBounceCount - 1);
 
       // Refraction
-      float n1 = 1.0f;                                        // Air
-      float n2 = hitGeometry->getMaterial().refractiveIndex;  // Glass
+      float n1 = 1.0f;                                       // Air
+      float n2 = hitGeometry->getMaterial().refractiveIndex; // Glass
 
       glm::vec3 d0 =
-          glm::normalize(ray.getDirection());  // Normalize incident direction
+          glm::normalize(ray.getDirection()); // Normalize incident direction
       float cosOmega = glm::clamp(glm::dot(d0, normal), -1.0f, 1.0f);
 
       // We are inside of the glass
-      if (cosOmega > 0) {
+      if (cosOmega > 0)
+      {
         std::swap(n1, n2);
-        normal = -normal;  // Invert normal if we are inside the object
+        normal = -normal; // Invert normal if we are inside the object
       }
 
-      float R = n1 / n2;  // Ratio of refractive indices
+      float R = n1 / n2; // Ratio of refractive indices
       float k =
-          1 - R * R * (1 - cosOmega * cosOmega);  // Snell's law discriminant
+          1 - R * R * (1 - cosOmega * cosOmega); // Snell's law discriminant
 
       glm::vec3 refractColor(0.0f);
-      if (k >= 0) {  // Total internal reflection check
+      if (k >= 0)
+      { // Total internal reflection check
         glm::vec3 refractDir =
             R * d0 + (R * cosOmega - sqrtf(k)) *
-                         normal;  // Calculate refraction direction
+                         normal; // Calculate refraction direction
         Ray refractedRay(hitPoint, refractDir);
         refractColor =
             castRay(refractedRay, diffuseBounceCount, mirrorBounceCount - 1);
@@ -182,12 +216,14 @@ glm::vec3 Camera::castRay(const Ray& ray, int diffuseBounceCount,
   return color;
 }
 
-glm::vec3 Camera::directLight(const glm::vec3& hitPoint,
-                              const glm::vec3& hitPointNormal, int index) {
+glm::vec3 Camera::directLight(const glm::vec3 &hitPoint,
+                              const glm::vec3 &hitPointNormal, int index)
+{
   glm::vec3 colorOfObject = geometries[index]->getMaterial().color;
   float irradiance = 0.0f;
 
-  for (Light* light : lights) {
+  for (Light *light : lights)
+  {
     irradiance += light->calculateLight(geometries, hitPoint, hitPointNormal,
                                         MAX_SHADOWRAYS);
   }
@@ -196,12 +232,14 @@ glm::vec3 Camera::directLight(const glm::vec3& hitPoint,
 }
 
 glm::vec3 Camera::indirectLight(int depthDiffuse, int depthReflective,
-                                const glm::vec3& hitPoint,
-                                const glm::vec3& hitPointNormal) {
+                                const glm::vec3 &hitPoint,
+                                const glm::vec3 &hitPointNormal)
+{
   glm::vec3 indirect{0.0f};
   Ray randomRay{};
 
-  for (int i = 0; i < MAX_INDIRECTRAYS; ++i) {
+  for (int i = 0; i < MAX_INDIRECTRAYS; ++i)
+  {
     randomRay.setRay(hitPoint, randomRayDirection(hitPointNormal));
     indirect += castRay(randomRay, depthDiffuse - 1, depthReflective);
   }
@@ -210,7 +248,8 @@ glm::vec3 Camera::indirectLight(int depthDiffuse, int depthReflective,
   return indirect;
 }
 
-glm::vec3 Camera::rayDirectionFromCamera(int i, int j) const {
+glm::vec3 Camera::rayDirectionFromCamera(int i, int j) const
+{
   // Beräknar u och v (positionen i world coordinates)
   // u och v är mellan -1 och 1
   float u = 1.0f - (2.0f * i) / width;
@@ -220,38 +259,52 @@ glm::vec3 Camera::rayDirectionFromCamera(int i, int j) const {
   return glm::normalize(glm::vec3(0.0f, u, v) - location);
 }
 
-glm::vec3 Camera::randomRayDirection(const glm::vec3& hitPointNormal) {
-  float random1 = (float)rand() / RAND_MAX;  // random value [0,1]
-  float random2 = (float)rand() / RAND_MAX;  // random value [0,1]
-  float phi = 2.0f * PI * random1;           // azimuth [0, 2PI]
-  float omega = PI * random2;                // inclination [0, PI]
+glm::vec3 Camera::randomRayDirection(const glm::vec3 &hitPointNormal)
+{
+  float random1 = (float)rand() / RAND_MAX; // random value [0,1]
+  float random2 = (float)rand() / RAND_MAX; // random value [0,1]
+  float phi = 2.0f * PI * random1;          // azimuth [0, 2PI]
+  float omega = PI * random2;               // inclination [0, PI]
 
   glm::vec3 worldDir = sphericalToCartesian(phi, omega, hitPointNormal);
 
   // Make sure the direction is not pointing back into the surface
-  if (glm::dot(worldDir, hitPointNormal) < 0.0f) worldDir = -worldDir;
+  if (glm::dot(worldDir, hitPointNormal) < 0.0f)
+    worldDir = -worldDir;
 
   return glm::normalize(worldDir);
 }
 
-void Camera::progressBar(float percent) {
+void Camera::progressBar(float percent)
+{
   const int BAR_WIDTH = 20;
+  const int PROGRESS_THRESHOLD = 2; // Update every 2% change
+  static int lastProgress = -PROGRESS_THRESHOLD;
 
-  std::cout << "[";
-  int pos = (int)(BAR_WIDTH * percent);
-  for (int i = 0; i < BAR_WIDTH; ++i) {
-    if (i <= pos)
-      std::cout << "=";
-    else
-      std::cout << " ";
+  int currentProgress = static_cast<int>(percent * 100.0f);
+  if (currentProgress - lastProgress >= PROGRESS_THRESHOLD)
+  {
+    lastProgress = currentProgress;
+
+    std::string bar = "[";
+    int pos = static_cast<int>(BAR_WIDTH * percent);
+    for (int i = 0; i < BAR_WIDTH; ++i)
+    {
+      if (i <= pos)
+        bar += "=";
+      else
+        bar += " ";
+    }
+    bar += "] " + std::to_string(currentProgress) + " %\r";
+
+    std::cout << bar;
+    std::cout.flush();
   }
-  std::cout << "] " << int(percent * 100.0f + 0.5f)
-            << " %\r";  // +0.5 for round-off error
-  std::cout.flush();
 }
 
 glm::vec3 Camera::sphericalToCartesian(float phi, float omega,
-                                       const glm::vec3& normal) {
+                                       const glm::vec3 &normal)
+{
   glm::vec3 cartesianDir(cos(phi) * sin(omega), sin(phi) * sin(omega),
                          cos(omega));
 
@@ -265,10 +318,11 @@ glm::vec3 Camera::sphericalToCartesian(float phi, float omega,
   return cartesianDir;
 }
 
-void Camera::configure(const std::vector<Geometry*>& newGeometries,
-                       const std::vector<Light*>& newLights,
+void Camera::configure(const std::vector<Geometry *> &newGeometries,
+                       const std::vector<Light *> &newLights,
                        int newDepthDiffuse, int newDepthReflective,
-                       int newShadowRays, int newIndirectRays) {
+                       int newShadowRays, int newIndirectRays)
+{
   geometries = newGeometries;
   lights = newLights;
   MAX_DEPTH_DIFFUSE = newDepthDiffuse;
@@ -277,17 +331,20 @@ void Camera::configure(const std::vector<Geometry*>& newGeometries,
   MAX_INDIRECTRAYS = newIndirectRays;
 }
 
-hitResult closestIntersect(const Ray& ray,
-                           const std::vector<Geometry*> geometries) {
+hitResult closestIntersect(const Ray &ray,
+                           const std::vector<Geometry *> geometries)
+{
   const float EPSILON = 1e-4f;
 
   float closestT = FLT_MAX;
-  int closestIndex = -1;  // Initialize to an invalid index
+  int closestIndex = -1; // Initialize to an invalid index
 
   // Check intersections with polygons
-  for (int i = 0; i < geometries.size(); i++) {
+  for (int i = 0; i < geometries.size(); i++)
+  {
     float t = geometries[i]->intersect(ray);
-    if (t > EPSILON && t < closestT) {
+    if (t > EPSILON && t < closestT)
+    {
       closestT = t;
       closestIndex = i;
     }

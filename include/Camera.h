@@ -76,7 +76,7 @@ class Camera {
   int MAX_SHADOWRAYS;
   int MAX_INDIRECTRAYS;
 
-  std::vector<std::vector<glm::vec3>> pixels;
+  std::vector<glm::vec3> pixels;  // Changed to 1D vector
 
   const float EPSILON = 1e-4f;
   const float PI = 3.14159265f;
