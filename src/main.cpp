@@ -5,8 +5,7 @@
 #include "../include/Scene.h"
 #include "../include/Sphere.h"
 
-int main()
-{
+int main() {
   // 400x400 pixels is max on my pc with low settings
   Scene myScene(200, 200);
 
@@ -51,7 +50,7 @@ int main()
 
   // Determines the number of rays shot from a single pixel, then averages them
   // Demanding!
-  int raysPerPixel = 4;
+  int raysPerPixel = 1;
 
   myScene.render(diffuseBounceCount, mirrorBounceCount, shadowRayCount,
                  indirectRayCount, raysPerPixel, "../images");
