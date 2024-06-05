@@ -23,6 +23,7 @@ class Rectangle : public Geometry {
  public:
   Rectangle(const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3,
             const glm::vec3& p4, const Material& material);
+  Rectangle(const Rectangle& other);
 
   float intersect(const Ray& ray) const override;
   glm::vec3 getNormal(const glm::vec3& point) const override;

@@ -47,9 +47,9 @@ Scene::Scene(int width, int height) : camera(width, height) {
   Rectangle* rectangle_wallVF = new Rectangle(p1, p2, p8, p7, materialWhite);
 
   // Tak
-  Triangle* triangle_ceilingB = new Triangle(p6, p10, p11, materialBlue);
-  Triangle* triangle_ceilingF = new Triangle(p7, p8, p9, materialBlue);
-  Rectangle* rectangle_ceiling = new Rectangle(p6, p7, p9, p10, materialBlue);
+  Triangle* triangle_ceilingB = new Triangle(p6, p10, p11, materialWhite);
+  Triangle* triangle_ceilingF = new Triangle(p7, p8, p9, materialWhite);
+  Rectangle* rectangle_ceiling = new Rectangle(p6, p7, p9, p10, materialWhite);
 
   // Lägger till alla polygoner i scenen
   addGeometry(triangle_floorB);
@@ -66,7 +66,12 @@ Scene::Scene(int width, int height) : camera(width, height) {
   addGeometry(rectangle_ceiling);
 }
 
-void Scene::addLight(Light* light) { lights.push_back(light); }
+void Scene::addLight(Light* light) {
+  lights.push_back(light);
+
+  Rectangle* lightGeometry = new Rectangle{light->getGeometry()};
+  addGeometry(lightGeometry);
+}
 
 void Scene::addGeometry(Geometry* geometry) { geometries.push_back(geometry); }
 

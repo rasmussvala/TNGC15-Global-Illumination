@@ -26,15 +26,10 @@ class Camera {
   // Save the image as a .ppm file to the specified
   void saveImage(std::string filename);
 
-  // Function to cast rays for a subset of rows, every thread gets a subset of
-  // rows to render, we use std::atomic to prevent race conditions
-  void castRaysSubset(int startRow, int endRow, int raysPerPixel,
-                      std::atomic<float>& progress);
-
   // Loop through all the pixels created for the cameras viewports and cast rays
   void castRays(int samplesPerPixel);
 
-  // Cast a ray and return the color of that ray, also initialize multicore
+  // Cast a ray and return the color of that ray
   glm::vec3 castRay(const Ray& ray, int depthDiffuse, int depthReflective);
 
   // Return the color of the direct light
@@ -56,7 +51,7 @@ class Camera {
   void progressBar(float percent);
 
   // Convert from hemispherical coordinate to world coordinate
-  glm::vec3 HemisphericalToWorld(float phi, float omega,
+  glm::vec3 sphericalToCartesian(float phi, float omega,
                                  const glm::vec3& normal);
 
   // Adds geometry, light, and configures render settings

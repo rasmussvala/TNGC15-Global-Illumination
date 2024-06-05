@@ -5,9 +5,9 @@ float Triangle::intersect(const Ray& ray) const {
   glm::vec3 D = ray.getDirection();
 
   // Vi träffar fel sida av triangeln eller är parallell med ytan
-  if (glm::dot(D, normal) > -EPSILON) {
+  /*if (glm::dot(D, normal) > -EPSILON) {
     return -1.0f;
-  }
+  }*/
 
   glm::vec3 E1 = v2 - v1;
   glm::vec3 E2 = v3 - v1;
@@ -45,6 +45,14 @@ Rectangle::Rectangle(const glm::vec3& p1, const glm::vec3& p2,
     : v1(p1), v2(p2), v3(p3), v4(p4), material(mat) {
   normal = glm::normalize(glm::cross(v2 - v1, v4 - v1));
 }
+
+Rectangle::Rectangle(const Rectangle& other)
+    : v1(other.v1),
+      v2(other.v2),
+      v3(other.v3),
+      v4(other.v4),
+      material(other.material),
+      normal(other.normal) {}
 
 float Rectangle::intersect(const Ray& ray) const {
   Triangle* triangle1 = new Triangle(v1, v2, v3, material);

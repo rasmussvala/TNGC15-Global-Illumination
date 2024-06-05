@@ -17,7 +17,7 @@ std::vector<Geometry*> Cube::getSurfaces() {
 
 // Initialize the member variables here
 Cube::Cube()
-    : color(0.0, 0.0, 0.4),
+    : color(0.4, 0.4, 0.4),
       material(DIFFUSE, color),
       p0(6.0f, -1.0f, -5.0f),
       p1(9.0f, -1.0f, -5.0f),
